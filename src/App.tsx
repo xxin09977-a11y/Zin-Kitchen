@@ -11,10 +11,12 @@ import {
   Moon,
   Type,
   Palette,
-  ChevronUp
+  ChevronUp,
+  X
 } from 'lucide-react';
 import { db, getRecipes, type Recipe } from './db';
 import { RecipeCard } from './components/RecipeCard';
+import { RecipeCardSkeleton } from './components/RecipeCardSkeleton';
 import { RecipeForm } from './components/RecipeForm';
 import { RecipeDetail } from './components/RecipeDetail';
 import { THEMES, FONT_SIZES, type AppSettings } from './types';
@@ -32,7 +34,7 @@ const TypewriterText = ({ text }: { text: string }) => {
       const zoomTimer = setTimeout(() => {
         setIsZooming(false);
         setIndex(0);
-      }, 1000);
+      }, 500); // Faster zoom
       return () => clearTimeout(zoomTimer);
     }
 
@@ -46,7 +48,7 @@ const TypewriterText = ({ text }: { text: string }) => {
         if (index < text.length) {
           setIndex((prev) => prev + 1);
         } else {
-          setPause(15); // Long pause at full logo
+          setPause(8); // Shorter pause at full logo
           setIsDeleting(true);
         }
       } else {
@@ -55,10 +57,11 @@ const TypewriterText = ({ text }: { text: string }) => {
         } else {
           setIsDeleting(false);
           setIsZooming(true); // Restart the mascot zoom
-          setPause(2);
+          setPause(1);
         }
       }
-    }, 171);
+    }, 80); // Faster interval
+
 
     return () => clearInterval(interval);
   }, [text, index, isDeleting, pause, isZooming]);
@@ -84,7 +87,7 @@ const TypewriterText = ({ text }: { text: string }) => {
       </defs>
       
       {/* Independent Static Mascot */}
-      <g className="transition-transform group-hover/logo:scale-110 active:scale-95">
+      <g className="transition-transform duration-150 group-hover/logo:scale-110 group-active/logo:scale-95">
         <text
           x="0"
           y="22"
@@ -155,9 +158,8 @@ export default function App() {
     root.style.setProperty('--grad2-color', theme.grad2);
 
     // Apply global font scaling (affects all rem-based units)
-    if (settings.fontSize === 'normal') root.style.fontSize = '16px';
-    else if (settings.fontSize === 'large') root.style.fontSize = '19px';
-    else if (settings.fontSize === 'extra-large') root.style.fontSize = '22px';
+    const activeFontSize = FONT_SIZES.find(f => f.id === settings.fontSize) || FONT_SIZES[0];
+    root.style.fontSize = activeFontSize.scale;
     
   }, [settings.themeId, settings.fontSize]);
 
@@ -254,7 +256,7 @@ export default function App() {
             <div className="flex gap-2 shrink-0">
               <button 
                 onClick={() => setShowSettings(!showSettings)}
-                className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl border border-white/20 transition-all text-white shadow-lg"
+                className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl border border-white/20 transition-all duration-150 active:scale-95 text-white shadow-lg"
                 title="Settings"
               >
                 <Settings2 size={18} className="text-white" />
@@ -283,12 +285,23 @@ export default function App() {
           <div className="absolute -bottom-4 left-0 right-0 h-px bg-gradient-to-r from-accent/40 via-white/5 to-transparent shadow-[0_1px_0_rgba(255,255,255,0.02)]" />
         </div>
 
-        {recipes && recipes.length > 0 ? (
+        {recipes === undefined ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-12">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <RecipeCardSkeleton key={`skeleton-${i}`} />
+            ))}
+          </div>
+        ) : recipes && recipes.length > 0 ? (
           <motion.div 
             initial="hidden"
             animate="visible"
             variants={{
-              visible: { transition: { staggerChildren: 0.05 } }
+              visible: { 
+                transition: { 
+                  staggerChildren: 0.03,
+                  delayChildren: 0.02
+                } 
+              }
             }}
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-12"
           >
@@ -297,8 +310,18 @@ export default function App() {
                 <motion.div
                   key={recipe.id}
                   variants={{
-                    hidden: { opacity: 0, y: 20 },
-                    visible: { opacity: 1, y: 0 }
+                    hidden: { opacity: 0, y: 15, scale: 0.95 },
+                    visible: { 
+                      opacity: 1, 
+                      y: 0, 
+                      scale: 1,
+                      transition: {
+                        type: "spring",
+                        damping: 20,
+                        stiffness: 500,
+                        mass: 0.6
+                      }
+                    }
                   }}
                   layout
                 >
@@ -341,7 +364,7 @@ export default function App() {
                 
                 <button 
                   onClick={() => { setEditingRecipe(undefined); setShowForm(true); }}
-                  className="px-8 py-3 bg-white text-black rounded-full font-black text-xs uppercase tracking-widest hover:bg-accent hover:text-white transition-all shadow-2xl active:scale-95"
+                  className="px-8 py-3 bg-white text-black rounded-full font-black text-xs uppercase tracking-widest hover:bg-accent hover:text-white transition-all duration-150 shadow-2xl active:scale-95"
                 >
                   Create Now
                 </button>
@@ -360,32 +383,42 @@ export default function App() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.8 }}
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="w-12 h-12 rounded-full glass-dark flex items-center justify-center text-white border border-white/20 shadow-2xl hover:bg-white/10 transition-all active:scale-95 group/btn"
+              className="w-12 h-12 rounded-full glass-dark flex items-center justify-center text-white border border-white/20 shadow-2xl hover:bg-white/10 transition-all duration-150 active:scale-95 group/btn"
             >
-              <ChevronUp size={24} className="group-hover/btn:-translate-y-1 transition-transform" />
+              <ChevronUp size={24} className="group-hover/btn:-translate-y-1 transition-transform duration-150" />
             </motion.button>
           )}
         </AnimatePresence>
 
         <button 
           onClick={() => { setEditingRecipe(undefined); setShowForm(true); }}
-          className="fab static"
+          className="fab static group/fab active:scale-[0.85] transition-all duration-150"
         >
-          <Plus size={28} />
+          <Plus size={28} className="transition-transform duration-300 group-hover/fab:rotate-90 group-active/fab:rotate-180" />
         </button>
       </div>
 
       {/* Settings Panel */}
       <AnimatePresence>
         {showSettings && (
-          <div 
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
             onClick={() => setShowSettings(false)}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           >
             <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              transition={{ 
+                type: "spring", 
+                damping: 25, 
+                stiffness: 500,
+                mass: 0.5
+              }}
               onClick={(e) => e.stopPropagation()}
               className="glass-dark p-6 rounded-[2rem] w-full max-w-sm space-y-6 shadow-2xl border border-white/10 max-h-[90vh] overflow-y-auto"
             >
@@ -430,7 +463,7 @@ export default function App() {
                   <button 
                     onClick={() => setSettings(s => ({ ...s, highContrast: !s.highContrast }))}
                     className={cn(
-                      "flex items-center justify-between p-4 rounded-2xl border transition-all shadow-sm active:scale-[0.98]",
+                      "flex items-center justify-between p-4 rounded-2xl border transition-all duration-150 shadow-sm active:scale-[0.98]",
                       settings.highContrast ? "bg-accent/20 border-accent/40 text-accent font-black" : "bg-white/5 border-white/5 text-white/60 hover:bg-white/10"
                     )}
                   >
@@ -444,7 +477,7 @@ export default function App() {
                   <button 
                     onClick={() => setSettings(s => ({ ...s, glassmorphism: !s.glassmorphism }))}
                     className={cn(
-                      "flex items-center justify-between p-4 rounded-2xl border transition-all shadow-sm active:scale-[0.98]",
+                      "flex items-center justify-between p-4 rounded-2xl border transition-all duration-150 shadow-sm active:scale-[0.98]",
                       settings.glassmorphism ? "bg-accent/20 border-accent/40 text-accent font-black" : "bg-white/5 border-white/5 text-white/60 hover:bg-white/10"
                     )}
                   >
@@ -485,14 +518,14 @@ export default function App() {
                   <div className="flex gap-2">
                     <button 
                       onClick={importRecipes}
-                      className="flex-1 flex flex-col items-center gap-1.5 py-3 bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 rounded-2xl transition-all shadow-md active:scale-95"
+                      className="flex-1 flex flex-col items-center gap-1.5 py-3 bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 rounded-2xl transition-all duration-150 shadow-md active:scale-90"
                     >
                       <Upload size={14} className="text-white/40" />
                       <span className="text-[9px] font-black uppercase tracking-widest text-white/60">Restore</span>
                     </button>
                     <button 
                       onClick={exportAll}
-                      className="flex-1 flex flex-col items-center gap-1.5 py-3 bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 rounded-2xl transition-all shadow-md active:scale-95"
+                      className="flex-1 flex flex-col items-center gap-1.5 py-3 bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 rounded-2xl transition-all duration-150 shadow-md active:scale-90"
                     >
                       <Download size={14} className="text-white/40" />
                       <span className="text-[9px] font-black uppercase tracking-widest text-white/60">Backup</span>
@@ -501,7 +534,7 @@ export default function App() {
                 </div>
               </div>
             </motion.div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
       {/* Modals */}

@@ -13,6 +13,7 @@ interface RecipeCardProps {
 
 export const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onClick, onEdit }) => {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   const handleDelete = async () => {
     await db.recipes.delete(recipe.id!);
@@ -30,29 +31,32 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onClick, onEdit 
       />
       <motion.div
         layout
-        initial={{ opacity: 0, y: 20 }}
+        whileHover={{ scale: 1.015, y: -2 }}
+        whileTap={{ scale: 0.98 }}
+        initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.9 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ type: "spring", stiffness: 500, damping: 20 }}
         onClick={onClick}
-        className="interactive-glass p-4 rounded-[24px] flex flex-col gap-2 group overflow-hidden"
+        className="interactive-glass p-4 rounded-[24px] flex flex-col gap-2 group overflow-hidden cursor-pointer"
       >
         {/* Hover Highlight Bloom */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-accent/10 blur-[40px] -translate-x-[-50%] -translate-y-[50%] group-hover:bg-accent/30 transition-all pointer-events-none" />
+        <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 blur-[40px] -translate-x-[-10%] -translate-y-[10%] group-hover:bg-accent/20 group-hover:blur-[60px] transition-all duration-150 pointer-events-none" />
         
         <div className="flex justify-between items-start gap-3 relative z-10">
           <div className="space-y-0.5">
             <h3 className="text-lg font-black leading-tight group-hover:text-accent transition-colors text-white line-clamp-1">{recipe.title}</h3>
           </div>
-          <div className="flex gap-1 transition-opacity">
+          <div className="flex gap-1 transition-opacity duration-150">
             <button 
               onClick={onEdit}
-              className="p-1.5 hover:bg-white/20 rounded-full text-white hover:text-bright transition-colors bg-white/10 border border-white/10 shadow-sm"
+              className="p-1.5 hover:bg-white/20 active:scale-90 rounded-full text-white hover:text-bright transition-all duration-150 bg-white/10 border border-white/10 shadow-sm"
             >
               <Edit3 size={13} className="text-white" />
             </button>
             <button 
               onClick={(e) => { e.stopPropagation(); setIsConfirmOpen(true); }}
-              className="p-1.5 hover:bg-red-500/30 rounded-full text-white hover:text-red-300 transition-colors bg-white/10 border border-white/10 shadow-sm"
+              className="p-1.5 hover:bg-red-500/30 active:scale-90 rounded-full text-white hover:text-red-300 transition-all duration-150 bg-white/10 border border-white/10 shadow-sm"
             >
               <Trash2 size={13} className="text-white" />
             </button>
@@ -60,8 +64,19 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onClick, onEdit 
         </div>
         
         {recipe.imageUrl && (
-          <div className="overflow-hidden rounded-lg relative z-10">
-             <img src={recipe.imageUrl} alt={recipe.title} referrerPolicy="no-referrer" className="w-full h-32 object-cover transition-transform duration-500 group-hover:scale-105" />
+          <div className="overflow-hidden rounded-lg relative z-10 h-32 bg-white/5">
+              {!imageLoaded && (
+                <div className="absolute inset-0 flex items-center justify-center animate-pulse bg-white/5">
+                   <div className="w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
+                </div>
+              )}
+             <img 
+               src={recipe.imageUrl} 
+               alt={recipe.title} 
+               referrerPolicy="no-referrer" 
+               className={cn("w-full h-full object-cover transition-all duration-500 group-hover:scale-105", imageLoaded ? "opacity-100" : "opacity-0")}
+               onLoad={() => setImageLoaded(true)}
+             />
           </div>
         )}
         

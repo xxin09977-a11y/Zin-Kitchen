@@ -25,11 +25,11 @@ export interface AppSettings {
   glassmorphism: boolean;
 }
 
-export const FONT_SIZES = {
-  normal: 'text-base',
-  large: 'text-xl',
-  'extra-large': 'text-2xl'
-};
+export const FONT_SIZES = [
+  { id: 'normal', name: 'Normal', scale: '16px' },
+  { id: 'large', name: 'Large', scale: '19px' },
+  { id: 'extra-large', name: 'Premium', scale: '22px' }
+];
 
 export const DISPLAY_UNIT_MAP: Record<string, string> = {
   g: 'grams',

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, Reorder, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, GripVertical, Check, X } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { Plus, Trash2, GripVertical, Check, X, Bold, Italic, List, ListOrdered, Quote } from 'lucide-react';
 import { db, IngredientUnit, type Recipe, type Ingredient } from '../db';
 import { cn } from '../lib/utils';
 
@@ -18,6 +19,23 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
   const [steps, setSteps] = useState<string[]>(recipe?.cookingSteps || ['']);
   const [imageUrl, setImageUrl] = useState(recipe?.imageUrl || '');
   const [unitPickerIndex, setUnitPickerIndex] = useState<number | null>(null);
+  const [focusedIngredientIndex, setFocusedIngredientIndex] = useState<number | null>(null);
+
+  const allRecipes = useLiveQuery(() => db.recipes.toArray(), []);
+  
+  const knownIngredients = useMemo(() => {
+    const set = new Set<string>();
+    const common = ["Salt", "Pepper", "Olive Oil", "Garlic", "Onion", "Butter", "Water", "Sugar", "Flour", "Eggs", "Milk", "Lemon Juice", "Soy Sauce", "Chicken Breast", "Beef", "Pork", "Rice", "Pasta", "Tomato", "Cheese"];
+    common.forEach(c => set.add(c.toLowerCase()));
+
+    if (allRecipes) {
+      allRecipes.forEach(r => {
+        r.ingredients.forEach(i => set.add(i.name.toLowerCase()));
+      });
+    }
+    
+    return Array.from(set).map(name => name.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '));
+  }, [allRecipes]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -80,16 +98,37 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
     newSteps[index] = value;
     setSteps(newSteps);
   };
+  const formatStep = (idx: number, type: 'bold' | 'italic' | 'list' | 'numbered' | 'quote') => {
+    const nextSteps = [...steps];
+    let val = nextSteps[idx];
+    if (type === 'bold') val = `**${val}**`;
+    else if (type === 'italic') val = `*${val}*`;
+    else if (type === 'list') val = `- ${val}`;
+    else if (type === 'numbered') val = `1. ${val}`;
+    else if (type === 'quote') val = `> ${val}`;
+    nextSteps[idx] = val;
+    setSteps(nextSteps);
+  };
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.98 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
       onClick={onClose}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
     >
-      <div 
+      <motion.div 
+        initial={{ scale: 0.95, y: 15, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        exit={{ scale: 0.95, y: 15, opacity: 0 }}
+        transition={{ 
+          type: "spring", 
+          damping: 25, 
+          stiffness: 500,
+          mass: 0.5
+        }}
         onClick={(e) => e.stopPropagation()} 
         className="glass-dark w-full max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-[24px] relative"
       >
@@ -97,7 +136,7 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
           <div className="flex items-center gap-3">
              <button 
               onClick={onClose} 
-              className="p-2 hover:bg-white/10 rounded-full transition-all text-white/50 hover:text-white border border-transparent hover:border-white/10 active:scale-90"
+              className="p-2 hover:bg-white/10 rounded-full transition-all duration-150 text-white/50 hover:text-white border border-transparent hover:border-white/10 active:scale-90"
             >
               <X size={18} />
             </button>
@@ -109,7 +148,7 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
           <button 
             type="submit"
             form="recipe-form"
-            className="px-6 py-2 bg-white text-black rounded-full text-xs font-black uppercase tracking-[2.5px] hover:bg-accent hover:text-white transition-all shadow-xl active:scale-95"
+            className="px-6 py-2 bg-white text-black rounded-full text-xs font-black uppercase tracking-[2.5px] hover:bg-accent hover:text-white transition-all duration-150 shadow-xl active:scale-90"
           >
             CONFIRM
           </button>
@@ -161,7 +200,7 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
               <button 
                 type="button" 
                 onClick={addIngredient}
-                className="text-[10px] font-black text-accent uppercase tracking-widest hover:brightness-125 transition-all bg-accent/10 px-3 py-1 rounded-full border border-accent/20"
+                className="text-[10px] font-black text-accent uppercase tracking-widest hover:brightness-125 transition-all bg-accent/10 px-3 py-1 rounded-full border border-accent/20 active:scale-95"
               >
                 + ADD
               </button>
@@ -173,14 +212,51 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
                   <div className="cursor-grab active:cursor-grabbing text-white opacity-40 group-hover:opacity-100 transition-opacity shrink-0">
                     <GripVertical size={14} />
                   </div>
-                  <div className="flex-1 flex gap-2 items-center border-b border-white/10 py-1.5">
-                    <input
-                      type="text"
-                      value={ing.name}
-                      onChange={(e) => updateIngredient(idx, 'name', e.target.value)}
-                      className="bg-transparent outline-none min-w-0 flex-1 font-bold text-sm placeholder:text-white/20 text-white"
-                      placeholder="Name..."
-                    />
+                  <div className="flex-1 flex gap-2 items-center border-b border-white/10 py-1.5 relative">
+                    <div className="flex-1 min-w-0 relative">
+                      <input
+                        type="text"
+                        value={ing.name}
+                        onFocus={() => setFocusedIngredientIndex(idx)}
+                        onBlur={() => setTimeout(() => setFocusedIngredientIndex(null), 150)}
+                        onChange={(e) => updateIngredient(idx, 'name', e.target.value)}
+                        className="bg-transparent outline-none w-full font-bold text-sm placeholder:text-white/20 text-white"
+                        placeholder="Name..."
+                      />
+                      <AnimatePresence>
+                        {focusedIngredientIndex === idx && ing.name.length > 0 && (
+                          (() => {
+                            const matches = knownIngredients
+                              .filter(k => k.toLowerCase().includes(ing.name.toLowerCase()) && k.toLowerCase() !== ing.name.toLowerCase())
+                              .slice(0, 5);
+                            if (matches.length === 0) return null;
+                            return (
+                              <motion.div
+                                initial={{ opacity: 0, y: -5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -5 }}
+                                transition={{ duration: 0.15 }}
+                                className="absolute top-full left-0 mt-2 w-full z-50 glass-dark border border-white/10 rounded-xl overflow-hidden shadow-2xl flex flex-col"
+                              >
+                                {matches.map(match => (
+                                  <button
+                                    type="button"
+                                    key={match}
+                                    onClick={() => {
+                                      updateIngredient(idx, 'name', match);
+                                      setFocusedIngredientIndex(null);
+                                    }}
+                                    className="w-full text-left px-4 py-2.5 text-sm font-bold text-white/80 hover:bg-white/10 hover:text-white border-b border-white/5 last:border-0 transition-colors"
+                                  >
+                                    {match}
+                                  </button>
+                                ))}
+                              </motion.div>
+                            );
+                          })()
+                        )}
+                      </AnimatePresence>
+                    </div>
                     <div className="flex items-center gap-1 shrink-0 relative">
                       <input
                         type="number"
@@ -210,9 +286,10 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
                               onClick={() => setUnitPickerIndex(null)}
                             />
                             <motion.div
-                              initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                              initial={{ opacity: 0, scale: 0.95, y: 5 }}
                               animate={{ opacity: 1, scale: 1, y: 0 }}
-                              exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                              exit={{ opacity: 0, scale: 0.95, y: 5 }}
+                              transition={{ duration: 0.1 }}
                               className="absolute right-0 bottom-full mb-2 z-50 glass-dark border border-white/10 p-2 rounded-2xl shadow-2xl min-w-[180px]"
                             >
                               <div className="grid grid-cols-3 gap-1.5">
@@ -225,7 +302,7 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
                                       setUnitPickerIndex(null);
                                     }}
                                     className={cn(
-                                      "flex items-center justify-center py-2 rounded-lg text-lg font-black uppercase transition-all",
+                                      "flex items-center justify-center py-2 rounded-lg text-lg font-black uppercase transition-all duration-150 active:scale-90",
                                       ing.unit === u 
                                         ? "bg-accent text-white" 
                                         : "bg-white/5 text-white/30 hover:bg-white/10 hover:text-white"
@@ -244,7 +321,7 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
                   <button 
                     type="button" 
                     onClick={() => removeIngredient(idx)}
-                    className="text-red-500/40 hover:text-red-500 transition-colors p-1 shrink-0 bg-white/5 rounded-md"
+                    className="text-red-500/40 hover:text-red-500 transition-colors duration-150 p-1 shrink-0 bg-white/5 rounded-md active:scale-90"
                   >
                     <Trash2 size={14} strokeWidth={2.5} />
                   </button>
@@ -259,7 +336,7 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
               <button 
                 type="button" 
                 onClick={addStep}
-                className="text-[10px] font-black text-accent uppercase tracking-widest hover:opacity-100 transition-opacity bg-accent/10 px-2 py-1 rounded-md"
+                className="text-[10px] font-black text-accent uppercase tracking-widest hover:opacity-100 transition-opacity bg-accent/10 px-2 py-1 rounded-md active:scale-95 transition-all"
               >
                 + ADD
               </button>
@@ -273,17 +350,26 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
                   </div>
                   <div className="flex-1 flex gap-3">
                     <span className="text-xs font-black text-white/60 mt-1.5">{idx + 1}.</span>
-                    <textarea
-                      value={step}
-                      onChange={(e) => updateStep(idx, e.target.value)}
-                      className="flex-1 bg-transparent outline-none resize-none min-h-[40px] text-sm text-white group-focus-within:text-bright transition-colors font-medium border-b border-white/10 py-1"
-                      placeholder="Step details..."
-                    />
+                    <div className="flex-1 flex flex-col gap-1">
+                      <textarea
+                        value={step}
+                        onChange={(e) => updateStep(idx, e.target.value)}
+                        className="flex-1 bg-transparent outline-none resize-none min-h-[40px] text-sm text-white group-focus-within:text-bright transition-colors font-medium border-b border-white/10 py-1"
+                        placeholder="Step details..."
+                      />
+                      <div className="flex gap-1">
+                        <button type="button" onClick={() => formatStep(idx, 'bold')} className="p-1 hover:bg-white/10 rounded"><Bold size={12} className="text-white/50" /></button>
+                        <button type="button" onClick={() => formatStep(idx, 'italic')} className="p-1 hover:bg-white/10 rounded"><Italic size={12} className="text-white/50" /></button>
+                        <button type="button" onClick={() => formatStep(idx, 'list')} className="p-1 hover:bg-white/10 rounded"><List size={12} className="text-white/50" /></button>
+                        <button type="button" onClick={() => formatStep(idx, 'numbered')} className="p-1 hover:bg-white/10 rounded"><ListOrdered size={12} className="text-white/50" /></button>
+                        <button type="button" onClick={() => formatStep(idx, 'quote')} className="p-1 hover:bg-white/10 rounded"><Quote size={12} className="text-white/50" /></button>
+                      </div>
+                    </div>
                   </div>
                   <button 
                     type="button" 
                     onClick={() => removeStep(idx)}
-                    className="text-red-500/40 hover:text-red-500 transition-colors h-fit p-1 mt-0.5 bg-white/5 rounded-md"
+                    className="text-red-500/40 hover:text-red-500 h-fit p-1 mt-0.5 bg-white/5 rounded-md active:scale-90 transition-all duration-150"
                   >
                     <Trash2 size={14} strokeWidth={2.5} />
                   </button>
@@ -292,7 +378,7 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
             </Reorder.Group>
           </div>
         </form>
-      </div>
+      </motion.div>
     </motion.div>
   );
 };

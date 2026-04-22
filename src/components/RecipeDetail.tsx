@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { motion } from 'motion/react';
 import { X, ChefHat, ListOrdered, Share2, Download, Minus, Plus, Check } from 'lucide-react';
 import { type Recipe } from '../db';
@@ -12,6 +13,8 @@ interface RecipeDetailProps {
 
 export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onClose }) => {
   const [multiplier, setMultiplier] = useState(1);
+  const [imageLoaded, setImageLoaded] = useState(false);
+
   const exportAsJSON = () => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(recipe));
     const downloadAnchorNode = document.createElement('a');
@@ -27,14 +30,20 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onClose }) =
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
       onClick={onClose}
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md"
     >
       <motion.div
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={{ type: "spring", damping: 25, stiffness: 200 }}
+        initial={{ y: "100%", opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: "100%", opacity: 0 }}
+        transition={{ 
+          type: "spring", 
+          damping: 25, 
+          stiffness: 500,
+          mass: 0.5
+        }}
         onClick={(e) => e.stopPropagation()}
         className="glass-dark w-full max-w-4xl h-[98vh] sm:h-[90vh] overflow-y-auto rounded-t-[3rem] sm:rounded-[3rem] p-0 relative shadow-2xl overflow-x-hidden border border-white/10"
       >
@@ -42,14 +51,14 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onClose }) =
         <div className="sticky top-0 z-40 flex justify-between items-center p-6 bg-transparent backdrop-blur-md">
           <button 
             onClick={onClose}
-            className="p-3 bg-black/40 hover:bg-black/60 rounded-full transition-all text-white border border-white/10 shadow-xl active:scale-90"
+            className="p-3 bg-black/40 hover:bg-black/60 rounded-full transition-all duration-150 text-white border border-white/10 shadow-xl active:scale-90"
           >
             <X size={20} />
           </button>
           <div className="flex gap-2">
             <button 
               onClick={exportAsJSON}
-              className="p-3 bg-black/40 hover:bg-black/60 rounded-full transition-all text-white border border-white/10 shadow-xl active:scale-90"
+              className="p-3 bg-black/40 hover:bg-black/60 rounded-full transition-all duration-150 text-white border border-white/10 shadow-xl active:scale-90"
               title="Export JSON"
             >
               <Download size={20} />
@@ -64,7 +73,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onClose }) =
                   }).catch(console.error);
                 }
               }}
-              className="p-3 bg-accent/80 hover:bg-accent rounded-full transition-all text-white border border-white/20 shadow-xl active:scale-90"
+              className="p-3 bg-accent/80 hover:bg-accent rounded-full transition-all duration-150 text-white border border-white/20 shadow-xl active:scale-90"
               title="Share"
             >
               <Share2 size={20} />
@@ -73,40 +82,48 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onClose }) =
         </div>
 
         {/* Hero Image Section */}
-        <div className="relative w-full h-[40vh] sm:h-[50vh] -mt-20">
+        <div className="relative w-full h-[40vh] sm:h-[50vh] -mt-20 overflow-hidden bg-black/40">
           {recipe.imageUrl ? (
-            <img 
-              src={recipe.imageUrl} 
-              alt={recipe.title} 
-              referrerPolicy="no-referrer" 
-              className="w-full h-full object-cover"
-            />
+            <>
+              {!imageLoaded && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-zinc-900/80 backdrop-blur-sm animate-pulse">
+                  <div className="w-16 h-16 border-4 border-accent/20 border-t-accent rounded-full animate-spin" />
+                </div>
+              )}
+              <img 
+                src={recipe.imageUrl} 
+                alt={recipe.title} 
+                referrerPolicy="no-referrer" 
+                className={cn("w-full h-full object-cover transition-opacity duration-300", imageLoaded ? "opacity-100" : "opacity-0")}
+                onLoad={() => setImageLoaded(true)}
+              />
+            </>
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-black flex items-center justify-center">
               <ChefHat size={80} className="text-white/10" />
             </div>
           )}
-          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black to-transparent z-10 pointer-events-none" />
         </div>
 
         {/* Content Section */}
         <div className="px-6 pb-20 sm:px-12 -mt-16 relative z-10">
           <div className="space-y-12">
             {/* Title & Description Card */}
-            <div className="glass-dark p-8 rounded-[2.5rem] border border-white/20 shadow-2xl backdrop-blur-2xl">
-              <div className="space-y-4">
+            <div className="glass-dark p-4 sm:p-6 rounded-[1.5rem] border border-white/20 shadow-2xl backdrop-blur-2xl">
+              <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="px-3 py-1 bg-accent/20 text-accent text-[10px] font-black uppercase tracking-[3px] rounded-full border border-accent/30">
+                  <span className="px-2 py-0.5 bg-accent/20 text-accent text-[8px] font-black uppercase tracking-[2px] rounded-full border border-accent/30">
                     Masterpiece
                   </span>
-                  <span className="text-[10px] font-black uppercase tracking-[3px] text-white/40">
+                  <span className="text-[8px] font-black uppercase tracking-[2px] text-white/40">
                     {new Date(recipe.updatedAt).toLocaleDateString([], { month: 'long', year: 'numeric' })}
                   </span>
                 </div>
-                <h1 className="text-4xl sm:text-6xl font-black leading-tight tracking-tighter text-white">
+                <h1 className="text-2xl sm:text-4xl font-black leading-snug tracking-tighter text-white">
                   {recipe.title}
                 </h1>
-                <p className="text-lg text-white/70 leading-relaxed max-w-2xl font-medium">
+                <p className="text-xs sm:text-sm text-white/70 leading-relaxed max-w-2xl font-medium">
                   {recipe.description || "A secret blend of flavors and passion, curated for the ultimate dining experience."}
                 </p>
               </div>
@@ -144,12 +161,12 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onClose }) =
 
                 <div className="glass-dark rounded-[2rem] border border-white/10 p-6 shadow-xl space-y-4">
                   {recipe.ingredients.map((ing, i) => (
-                    <div key={i} className="flex justify-between items-center group cursor-pointer hover:bg-white/5 p-2 -m-2 rounded-xl transition-all">
+                    <div key={i} className="flex justify-between items-center group cursor-pointer hover:bg-white/5 p-2 -m-2 rounded-xl transition-all duration-150">
                       <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full border-2 border-white/20 group-hover:border-accent group-hover:bg-accent/10 transition-all flex items-center justify-center">
-                          <Check size={10} className="text-white opacity-0 group-hover:opacity-100" />
+                        <div className="w-5 h-5 rounded-full border-2 border-white/20 group-hover:border-accent group-hover:bg-accent/10 transition-all duration-150 flex items-center justify-center">
+                          <Check size={10} className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
                         </div>
-                        <span className="text-base font-bold text-white group-hover:text-accent transition-colors">
+                        <span className="text-base font-bold text-white group-hover:text-accent transition-colors duration-150">
                           {ing.name}
                         </span>
                       </div>
@@ -187,10 +204,10 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onClose }) =
                       </div>
 
                       <div className="pb-8 flex-1">
-                        <div className="glass-dark p-6 rounded-[2rem] border border-white/10 group-hover:border-white/30 group-hover:bg-white/5 transition-all shadow-lg active:scale-[0.99]">
-                          <p className="text-lg leading-relaxed text-white/80 group-hover:text-white transition-colors font-medium">
-                            {step}
-                          </p>
+                        <div className="glass-dark p-6 rounded-[2rem] border border-white/10 group-hover:border-white/30 group-hover:bg-white/5 transition-all duration-150 shadow-lg active:scale-95 cursor-pointer">
+                          <div className="text-lg leading-relaxed text-white/80 group-hover:text-white transition-colors duration-150 font-medium prose prose-invert prose-headings:font-black prose-p:my-2 prose-ul:list-disc prose-ul:pl-5 prose-ol:list-decimal prose-ol:pl-5 prose-blockquote:border-l-4 prose-blockquote:border-accent prose-blockquote:pl-4 prose-blockquote:text-white/60 prose-blockquote:italic">
+                            <ReactMarkdown>{step}</ReactMarkdown>
+                          </div>
                         </div>
                       </div>
                     </div>
