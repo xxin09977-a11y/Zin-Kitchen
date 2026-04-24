@@ -123,9 +123,6 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onClose }) =
                 <h1 className="text-2xl sm:text-4xl font-black leading-snug tracking-tighter text-white">
                   {recipe.title}
                 </h1>
-                <p className="text-xs sm:text-sm text-white/70 leading-relaxed max-w-2xl font-medium">
-                  {recipe.description || "A secret blend of flavors and passion, curated for the ultimate dining experience."}
-                </p>
               </div>
             </div>
 

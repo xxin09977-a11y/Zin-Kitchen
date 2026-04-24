@@ -80,10 +80,6 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onClick, onEdit 
           </div>
         )}
         
-        <p className="text-sm text-white/80 leading-relaxed line-clamp-2 mt-1 font-medium relative z-10">
-          {recipe.description || 'No description provided.'}
-        </p>
-
         <div className="flex items-center justify-between pt-4 border-t border-white/20 mt-auto relative z-10">
           <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/60">
             {recipe.ingredients.length} Components

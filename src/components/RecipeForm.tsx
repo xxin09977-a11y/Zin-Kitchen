@@ -20,6 +20,7 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
   const [imageUrl, setImageUrl] = useState(recipe?.imageUrl || '');
   const [unitPickerIndex, setUnitPickerIndex] = useState<number | null>(null);
   const [focusedIngredientIndex, setFocusedIngredientIndex] = useState<number | null>(null);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState<number>(-1);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const allRecipes = useLiveQuery(() => db.recipes.toArray(), []);
@@ -40,7 +41,13 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
 
   const knownIngredients = useMemo(() => {
     const set = new Set<string>();
-    const common = ["Salt", "Pepper", "Olive Oil", "Garlic", "Onion", "Butter", "Water", "Sugar", "Flour", "Eggs", "Milk", "Lemon Juice", "Soy Sauce", "Chicken Breast", "Beef", "Pork", "Rice", "Pasta", "Tomato", "Cheese"];
+    const common = [
+      "Salt", "Black Pepper", "Olive Oil", "Garlic", "Onion", "Butter", "Water", "Sugar", "Flour", "Eggs", "Milk", 
+      "Lemon Juice", "Soy Sauce", "Chicken Breast", "Beef", "Pork", "Rice", "Pasta", "Tomato", "Cheese",
+      "Parsley", "Cilantro", "Ginger", "Sesame Oil", "Honey", "Red Wine Vinegar", "Balsamic Vinegar", "Cumin",
+      "Paprika", "Chili Powder", "Oregano", "Thyme", "Rosemary", "Heavy Cream", "Greek Yogurt", "Parmesan",
+      "Mozzarella", "Cheddar", "Chicken Broth", "Vegetable Broth", "Carrot", "Celery", "Bell Pepper", "Spinach"
+    ];
     common.forEach(c => set.add(c.toLowerCase()));
 
     if (allRecipes) {
@@ -242,9 +249,41 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
                       <input
                         type="text"
                         value={ing.name}
-                        onFocus={() => setFocusedIngredientIndex(idx)}
-                        onBlur={() => setTimeout(() => setFocusedIngredientIndex(null), 150)}
-                        onChange={(e) => updateIngredient(idx, 'name', e.target.value)}
+                        onFocus={() => {
+                          setFocusedIngredientIndex(idx);
+                          setSelectedSuggestionIndex(-1);
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            setFocusedIngredientIndex(null);
+                            setSelectedSuggestionIndex(-1);
+                          }, 200);
+                        }}
+                        onKeyDown={(e) => {
+                          const matches = knownIngredients
+                            .filter(k => k.toLowerCase().includes(ing.name.toLowerCase()) && k.toLowerCase() !== ing.name.toLowerCase())
+                            .slice(0, 5);
+                          
+                          if (matches.length > 0 && focusedIngredientIndex === idx) {
+                            if (e.key === 'ArrowDown') {
+                              e.preventDefault();
+                              setSelectedSuggestionIndex(prev => Math.min(prev + 1, matches.length - 1));
+                            } else if (e.key === 'ArrowUp') {
+                              e.preventDefault();
+                              setSelectedSuggestionIndex(prev => Math.max(prev - 1, 0));
+                            } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
+                              e.preventDefault();
+                              updateIngredient(idx, 'name', matches[selectedSuggestionIndex]);
+                              setFocusedIngredientIndex(null);
+                            } else if (e.key === 'Escape') {
+                              setFocusedIngredientIndex(null);
+                            }
+                          }
+                        }}
+                        onChange={(e) => {
+                          updateIngredient(idx, 'name', e.target.value);
+                          setSelectedSuggestionIndex(-1);
+                        }}
                         className="bg-transparent outline-none w-full font-bold text-sm placeholder:text-white/20 text-white"
                         placeholder="Name..."
                       />
@@ -263,15 +302,21 @@ export const RecipeForm: React.FC<RecipeFormProps> = ({ recipe, onClose, onSave 
                                 transition={{ duration: 0.15 }}
                                 className="absolute top-full left-0 mt-2 w-full z-50 glass-dark border border-white/10 rounded-xl overflow-hidden shadow-2xl flex flex-col"
                               >
-                                {matches.map(match => (
+                                {matches.map((match, mIdx) => (
                                   <button
                                     type="button"
                                     key={match}
+                                    onMouseEnter={() => setSelectedSuggestionIndex(mIdx)}
                                     onClick={() => {
                                       updateIngredient(idx, 'name', match);
                                       setFocusedIngredientIndex(null);
                                     }}
-                                    className="w-full text-left px-4 py-2.5 text-sm font-bold text-white/80 hover:bg-white/10 hover:text-white border-b border-white/5 last:border-0 transition-colors"
+                                    className={cn(
+                                      "w-full text-left px-4 py-2.5 text-sm font-bold transition-colors border-b border-white/5 last:border-0",
+                                      selectedSuggestionIndex === mIdx 
+                                        ? "bg-accent text-white" 
+                                        : "text-white/80 hover:bg-white/10 hover:text-white"
+                                    )}
                                   >
                                     {match}
                                   </button>

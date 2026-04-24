@@ -1,556 +1,1092 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Plus, 
-  Settings2, 
-  Download, 
-  Upload, 
-  ChefHat,
-  Sun,
-  Moon,
-  Type,
-  Palette,
-  ChevronUp,
-  X
-} from 'lucide-react';
-import { db, getRecipes, type Recipe } from './db';
-import { RecipeCard } from './components/RecipeCard';
-import { RecipeCardSkeleton } from './components/RecipeCardSkeleton';
-import { RecipeForm } from './components/RecipeForm';
-import { RecipeDetail } from './components/RecipeDetail';
-import { THEMES, FONT_SIZES, type AppSettings } from './types';
+import { useState, useCallback, memo, useRef, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "motion/react";
+import ReactMarkdown from "react-markdown";
+import { THEMES, Theme } from './types';
 import { cn } from './lib/utils';
 
-// Define the typewriter effect component
-const TypewriterText = ({ text }: { text: string }) => {
-  const [index, setIndex] = useState(0); // Start at 0 for full typing
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [pause, setPause] = useState(0);
-  const [isZooming, setIsZooming] = useState(true);
+// Helper mapping for dynamic icons
+const getIconForRecipe = (name: string): string => {
+  const n = name.toLowerCase();
+  if (n.includes("spaghetti") || n.includes("pasta") || n.includes("noodle") || n.includes("ramen")) return "🍝";
+  if (n.includes("chicken") || n.includes("chop") || n.includes("wing") || n.includes("drumstick")) return "🍗";
+  if (n.includes("cake") || n.includes("dessert") || n.includes("sweet") || n.includes("cupcake") || n.includes("cookie")) return "🍰";
+  if (n.includes("bread") || n.includes("toast") || n.includes("bun") || n.includes("bagel")) return "🍞";
+  if (n.includes("burger") || n.includes("smash")) return "🍔";
+  if (n.includes("rice") || n.includes("risotto") || n.includes("biryani")) return "🍚";
+  if (n.includes("taco") || n.includes("burrito") || n.includes("mexican")) return "🌮";
+  if (n.includes("salad") || n.includes("veg") || n.includes("green")) return "🥗";
+  if (n.includes("steak") || n.includes("meat") || n.includes("beef") || n.includes("pork")) return "🥩";
+  if (n.includes("sushi") || n.includes("fish") || n.includes("seafood")) return "🍣";
+  if (n.includes("pizza")) return "🍕";
+  if (n.includes("coffee") || n.includes("tea") || n.includes("drink")) return "☕";
+  return "🍽️";
+};
 
-  useEffect(() => {
-    if (isZooming) {
-      const zoomTimer = setTimeout(() => {
-        setIsZooming(false);
-        setIndex(0);
-      }, 500); // Faster zoom
-      return () => clearTimeout(zoomTimer);
-    }
-
-    const interval = setInterval(() => {
-      if (pause > 0) {
-        setPause((prev) => prev - 1);
-        return;
-      }
-
-      if (!isDeleting) {
-        if (index < text.length) {
-          setIndex((prev) => prev + 1);
-        } else {
-          setPause(8); // Shorter pause at full logo
-          setIsDeleting(true);
-        }
-      } else {
-        if (index > 0) {
-          setIndex((prev) => prev - 1);
-        } else {
-          setIsDeleting(false);
-          setIsZooming(true); // Restart the mascot zoom
-          setPause(1);
-        }
-      }
-    }, 80); // Faster interval
-
-
-    return () => clearInterval(interval);
-  }, [text, index, isDeleting, pause, isZooming]);
-
-  const displayedText = useMemo(() => text.slice(0, index), [text, index]);
-
+const Tooltip = ({ text, children, T }: { text: string; children: React.ReactNode; T: Theme }) => {
+  const [show, setShow] = useState(false);
   return (
-    <svg 
-      className="h-10 w-[240px] overflow-visible shrink-0 cursor-pointer group/logo" 
-      viewBox="0 0 240 40"
-      onClick={() => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }}
+    <div 
+      style={{ position: "relative", display: "inline-block" }} 
+      onMouseEnter={() => setShow(true)} 
+      onMouseLeave={() => setShow(false)}
+      onFocus={() => setShow(true)}
+      onBlur={() => setShow(false)}
     >
-      <defs>
-        <filter id="colorfulGlow" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-          <feMerge>
-            <feMergeNode in="coloredBlur"/>
-            <feMergeNode in="SourceGraphic"/>
-          </feMerge>
-        </filter>
-      </defs>
-      
-      {/* Independent Static Mascot */}
-      <g className="transition-transform duration-150 group-hover/logo:scale-110 group-active/logo:scale-95">
-        <text
-          x="0"
-          y="22"
-          dominantBaseline="middle"
-          className="animate-rainbow-glow"
-          style={{ fontSize: "30px", filter: "url(#colorfulGlow)" }}
-        >
-          🐯
-        </text>
-      </g>
-
-      {/* Separated Typewriter Text starting from Z */}
-      <g transform="translate(48, 22)">
-        <text
-          x="0"
-          y="0"
-          dominantBaseline="middle"
-          className="text-transparent font-light stroke-[1px] stroke-accent/40 animate-draw-text"
-          style={{ 
-            fontSize: "22px", 
-            letterSpacing: "0.5px",
-            fontFamily: "var(--font-sans)"
-          }}
-        >
-          {displayedText}
-        </text>
-        <text
-          x="0"
-          y="0"
-          dominantBaseline="middle"
-          className="fill-white font-light drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]"
-          style={{ 
-            fontSize: "22px", 
-            letterSpacing: "0.5px", 
-            fontFamily: "var(--font-sans)"
-          }}
-        >
-          {displayedText}
-        </text>
-      </g>
-    </svg>
+      {children}
+      <AnimatePresence>
+        {show && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 10, x: "-50%" }}
+            animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, scale: 0.9, y: 5, x: "-50%" }}
+            style={{
+              position: "absolute",
+              bottom: "125%",
+              left: "50%",
+              background: T.card,
+              color: T.text,
+              padding: "5px 10px",
+              borderRadius: "8px",
+              fontSize: "10px",
+              fontWeight: "700",
+              whiteSpace: "nowrap",
+              zIndex: 100,
+              pointerEvents: "none",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+              border: `1.5px solid ${T.cardBorder}`,
+              backdropFilter: "blur(8px)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em"
+            }}
+          >
+            {text}
+            <div style={{
+              position: "absolute",
+              top: "100%",
+              left: "50%",
+              transform: "translateX(-50%)",
+              borderLeft: "6px solid transparent",
+              borderRight: "6px solid transparent",
+              borderTop: `6px solid ${T.cardBorder}`
+            }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
 
-export default function App() {
-  const [showForm, setShowForm] = useState(false);
-  const [editingRecipe, setEditingRecipe] = useState<Recipe | undefined>();
-  const [viewingRecipe, setViewingRecipe] = useState<Recipe | undefined>();
-  const [showSettings, setShowSettings] = useState(false);
-  const [showBackToTop, setShowBackToTop] = useState(false);
+const BASE_RECIPES = [
+  { id: 1, name: "Dragon Ramen", cuisine: "Japanese", emoji: "🍜", color: "#ff6b35", time: 45, timeUnit: "min", ingredients: [{ name: "Noodles", amount: 200, unit: "g" }, { name: "Broth", amount: 800, unit: "ml" }, { name: "Eggs", amount: 2, unit: "pcs" }, { name: "Soy Sauce", amount: 3, unit: "tbsp" }, { name: "Chili Oil", amount: 1, unit: "tsp" }], instructions: "### Prep\n- Boil water for noodles.\n- Simmer broth for 20 mins.\n\n### Assembly\n1. Place noodles in bowl.\n2. Pour **hot** broth over.\n3. Add toppings.\n\n> Best served piping hot!" },
+  { id: 2, name: "Truffle Risotto", cuisine: "Italian", emoji: "🍚", color: "#a855f7", time: 35, timeUnit: "min", ingredients: [{ name: "Arborio Rice", amount: 300, unit: "g" }, { name: "Parmesan", amount: 80, unit: "g" }, { name: "Truffle Oil", amount: 2, unit: "tbsp" }, { name: "White Wine", amount: 150, unit: "ml" }, { name: "Butter", amount: 50, unit: "g" }], instructions: "### Steps\n1. Toast rice in butter.\n2. Deglaze with white wine.\n3. Add warm stock slowly.\n4. Finish with *parmesan* and truffle oil." },
+  { id: 3, name: "Smash Burger", cuisine: "American", emoji: "🍔", color: "#f59e0b", time: 20, timeUnit: "min", ingredients: [{ name: "Ground Beef", amount: 200, unit: "g" }, { name: "Cheddar", amount: 40, unit: "g" }, { name: "Brioche Bun", amount: 1, unit: "pcs" }, { name: "Pickles", amount: 4, unit: "pcs" }, { name: "Special Sauce", amount: 2, unit: "tbsp" }], instructions: "### Method\n- Roll beef into balls.\n- **Smash** thin on a high-heat griddle.\n- Flip and add cheese.\n- Toast buns and assemble." },
+  { id: 4, name: "Pad Thai", cuisine: "Thai", emoji: "🥘", color: "#10b981", time: 30, timeUnit: "min", ingredients: [{ name: "Rice Noodles", amount: 250, unit: "g" }, { name: "Shrimp", amount: 150, unit: "g" }, { name: "Fish Sauce", amount: 3, unit: "tbsp" }, { name: "Lime", amount: 1, unit: "pcs" }, { name: "Peanuts", amount: 30, unit: "g" }], instructions: "### Preparation\n1. Soak noodles until soft.\n2. Stir-fry shrimp and aromatics.\n3. Add noodles and sauce.\n4. Toss with lime and crushed peanuts." },
+  { id: 5, name: "Taco al Pastor", cuisine: "Mexican", emoji: "🌮", color: "#ef4444", time: 25, timeUnit: "min", ingredients: [{ name: "Pork", amount: 300, unit: "g" }, { name: "Corn Tortilla", amount: 3, unit: "pcs" }, { name: "Pineapple", amount: 100, unit: "g" }, { name: "Onion", amount: 0.5, unit: "pcs" }, { name: "Cilantro", amount: 10, unit: "g" }], instructions: "### Instructions\n- Slice marinated pork thinly.\n- Sear on high heat with pineapple.\n- Serve in warm corn tortillas.\n- Top with onion and cilantro." },
+];
+
+const CATS = ["All", "Japanese", "Italian", "American", "Thai", "Mexican", "Custom"];
+const SCALERS = [{ label: "1×", val: 1 }, { label: "½", val: 0.5 }, { label: "⅓", val: 1 / 3 }, { label: "¼", val: 0.25 }, { label: "2×", val: 2 }, { label: "3×", val: 3 }];
+
+function fmt(n: number, s: number) { const v = n * s; return Number.isInteger(v) ? v : parseFloat(v.toFixed(1)); }
+
+const useLongPress = (callback: () => void, ms = 600) => {
+  const timer = useRef<any>(null);
+  const start = useCallback(() => {
+    timer.current = setTimeout(callback, ms);
+  }, [callback, ms]);
+  const stop = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+  return {
+    onMouseDown: start,
+    onMouseUp: stop,
+    onMouseLeave: stop,
+    onTouchStart: start,
+    onTouchEnd: stop,
+  };
+};
+
+const RecipeCard = memo(({ recipe, T, onOpen, onLongPress }: { recipe: any, T: Theme, onOpen: (r: any) => void, onLongPress: (r: any) => void }) => {
+  const ref = useRef<HTMLDivElement>(null);
   
-  const [settings, setSettings] = useState<AppSettings>({
-    highContrast: false,
-    fontSize: 'normal',
-    themeId: 'noir',
-    glassmorphism: true
-  });
+  const lp = useLongPress(() => onLongPress(recipe));
 
-  // Apply theme and font size
-  useEffect(() => {
-    const theme = THEMES.find(t => t.id === settings.themeId) || THEMES[0];
-    const root = document.documentElement;
-    
-    // Apply colors
-    root.style.setProperty('--accent-color', theme.accent);
-    root.style.setProperty('--bg-color', theme.bg);
-    root.style.setProperty('--grad1-color', theme.grad1);
-    root.style.setProperty('--grad2-color', theme.grad2);
-    
-    // Toggle light class
-    if (settings.themeId === 'light') {
-      root.classList.add('light');
-    } else {
-      root.classList.remove('light');
-    }
-
-    // Apply global font scaling (affects all rem-based units)
-    const activeFontSize = FONT_SIZES.find(f => f.id === settings.fontSize) || FONT_SIZES[0];
-    root.style.fontSize = activeFontSize.scale;
-    
-  }, [settings.themeId, settings.fontSize]);
-
-  // Scroll listener for Back to Top
-  useEffect(() => {
-    const handleScroll = () => {
-      setShowBackToTop(window.scrollY > 400);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+  const mm = useCallback((e: React.MouseEvent) => {
+    const el = ref.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    const rx = ((e.clientY - r.top) / r.height - 0.5) * -9;
+    const ry = ((e.clientX - r.left) / r.width - 0.5) * 9;
+    el.style.transform = `perspective(700px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(8px)`;
   }, []);
+  const ml = useCallback(() => { if (ref.current) ref.current.style.transform = "perspective(700px) rotateX(0) rotateY(0) translateZ(0)"; }, []);
 
-  // Handle back button for modals
-  useEffect(() => {
-    const handlePopState = () => {
-      setShowForm(false);
-      setViewingRecipe(undefined);
-      setShowSettings(false);
-      setEditingRecipe(undefined);
-    };
+  return (
+    <motion.div 
+      layout
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
+      whileTap={{ scale: 0.96 }}
+      ref={ref} 
+      onMouseMove={mm} 
+      onMouseLeave={ml} 
+      onClick={() => onOpen(recipe)} 
+      {...lp}
+      style={{
+        borderRadius: 20, padding: 2, cursor: "pointer", position: "relative", overflow: "hidden",
+        transition: "transform 0.1s ease-out, box-shadow 0.15s ease", willChange: "transform",
+        background: T.card,
+        boxShadow: T.cardShadow,
+        userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none"
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {/* Animated Rotating Border */}
+      <div style={{
+        position: "absolute",
+        top: "-50%",
+        left: "-50%",
+        width: "200%",
+        height: "200%",
+        background: `conic-gradient(from 0deg, transparent, ${recipe.color}, transparent 25%)`,
+        animation: "border-spin 3s linear infinite",
+        zIndex: 0
+      }} />
 
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  // Update history state when modals open
-  useEffect(() => {
-    if (showForm || viewingRecipe || showSettings) {
-      window.history.pushState(null, '', null);
-    }
-  }, [showForm, viewingRecipe, showSettings]);
-
-  const recipes = useLiveQuery(
-    () => getRecipes(),
-    []
+      {/* Inner Mask/Content */}
+      <div style={{
+        position: "relative", zIndex: 1,
+        background: T.bg,
+        borderRadius: 19, padding: "14px 13px",
+        height: "100%",
+        border: `none`,
+        backdropFilter: "blur(18px) saturate(160%)", WebkitBackdropFilter: "blur(18px) saturate(160%)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <motion.div 
+            whileHover={{ rotate: [0, -10, 10, 0], transition: { duration: 0.4 } }}
+            style={{
+              width: 42, height: 42, borderRadius: 13, display: "flex", alignItems: "center",
+              justifyContent: "center", fontSize: 22, flexShrink: 0,
+              background: `linear-gradient(135deg,${recipe.color}30,${recipe.color}10)`,
+              border: `1.5px solid ${recipe.color}45`, boxShadow: `0 4px 12px ${recipe.color}25`
+            }}
+          >
+            {recipe.emoji}
+          </motion.div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: "'Playfair Display',serif", fontWeight: 700, fontSize: 15,
+              color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+            }}>
+              {recipe.name}
+            </div>
+            <div style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase",
+              color: T.subtext, marginTop: 1
+            }}>{recipe.cuisine} · {recipe.time}{recipe.timeUnit}</div>
+          </div>
+        </div>
+        <div style={{ height: 1 }} />
+      </div>
+    </motion.div>
   );
+});
 
-  const importRecipes = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'application/json';
-    input.onchange = async (e: any) => {
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onload = async (event: any) => {
-        try {
-          const data = JSON.parse(event.target.result);
-          const recipesToAdd = Array.isArray(data) ? data : [data];
-          for (const r of recipesToAdd) {
-            const { id, ...cleanRecipe } = r;
-            await db.recipes.add({
-              ...cleanRecipe,
-              createdAt: Date.now(),
-              updatedAt: Date.now()
-            });
-          }
-          alert('Recipes imported successfully!');
-        } catch (err) {
-          alert('Invalid JSON file.');
-        }
-      };
-      reader.readAsText(file);
+const CookingTimer = memo(({ initialMinutes, T, onBack }: { initialMinutes: number, T: Theme, onBack: () => void }) => {
+  const [seconds, setSeconds] = useState(initialMinutes * 60);
+  const [isRunning, setIsRunning] = useState(false);
+  const [isAlarmPlaying, setIsAlarmPlaying] = useState(false);
+  const [editMins, setEditMins] = useState<string | null>(null);
+  const [editSecs, setEditSecs] = useState<string | null>(null);
+  const timerRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Standard pleasant alarm sound
+    audioRef.current = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
+    audioRef.current.loop = true;
+    return () => {
+      audioRef.current?.pause();
+      audioRef.current = null;
     };
-    input.click();
+  }, []);
+
+  useEffect(() => {
+    if (isRunning && seconds > 0) {
+      timerRef.current = setInterval(() => {
+        setSeconds(s => {
+          if (s <= 1) {
+            setIsAlarmPlaying(true);
+            return 0;
+          }
+          return s - 1;
+        });
+      }, 1000);
+    } else {
+      clearInterval(timerRef.current);
+      if (seconds === 0) setIsRunning(false);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [isRunning, seconds]);
+
+  useEffect(() => {
+    if (isAlarmPlaying) {
+      audioRef.current?.play().catch(e => console.log("Audio play failed:", e));
+    } else {
+      audioRef.current?.pause();
+      if (audioRef.current) audioRef.current.currentTime = 0;
+    }
+  }, [isAlarmPlaying]);
+
+  const toggle = () => {
+    if (isAlarmPlaying) setIsAlarmPlaying(false);
+    setIsRunning(!isRunning);
+    setEditMins(null);
+    setEditSecs(null);
   };
 
-  const exportAll = async () => {
-    const all = await db.recipes.toArray();
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(all));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href",     dataStr);
-    downloadAnchorNode.setAttribute("download", `chefglass_all_backup.json`);
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
+  const reset = () => {
+    setIsAlarmPlaying(false);
+    setIsRunning(false);
+    setSeconds(initialMinutes * 60);
+    setEditMins(null);
+    setEditSecs(null);
+  };
+
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+
+  const handleMinsChange = (val: string) => {
+    const m = parseInt(val) || 0;
+    setSeconds(m * 60 + (seconds % 60));
+  };
+
+  const handleSecsChange = (val: string) => {
+    const s = Math.min(59, parseInt(val) || 0);
+    setSeconds(Math.floor(seconds / 60) * 60 + s);
+  };
+
+  return createPortal(
+    <motion.div
+      drag
+      dragMomentum={false}
+      dragElastic={0.05}
+      initial={{ y: 20, opacity: 0 }}
+      animate={{ 
+        y: 0, 
+        opacity: 1,
+        scale: isAlarmPlaying ? [1, 1.02, 1] : 1
+      }}
+      transition={{
+        scale: isAlarmPlaying ? { repeat: Infinity, duration: 0.5 } : { duration: 0.2 }
+      }}
+      exit={{ y: 80, opacity: 0 }}
+      style={{
+        position: "fixed", bottom: 100, left: 16, zIndex: 9999,
+        width: "calc(100% - 32px)", maxWidth: 360,
+        padding: "10px 16px", borderRadius: 20,
+        background: isAlarmPlaying ? `linear-gradient(135deg, ${T.card}, #2d1a1a)` : `linear-gradient(135deg, ${T.card}, ${T.bg}dd)`,
+        border: `1.5px solid ${isAlarmPlaying ? "#ef444455" : T.cardBorder}`,
+        backdropFilter: "blur(24px)",
+        boxShadow: isAlarmPlaying 
+          ? "0 0 30px rgba(239, 68, 68, 0.4), 0 12px 40px rgba(0,0,0,0.6)" 
+          : "0 12px 40px rgba(0,0,0,0.5), 0 0 20px rgba(99,102,241,0.15)",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: 12,
+        touchAction: "none",
+        cursor: "grab",
+        transition: "background 0.3s, border 0.3s, box-shadow 0.3s"
+      }}
+      whileDrag={{ scale: 1.05, cursor: "grabbing", boxShadow: "0 20px 50px rgba(0,0,0,0.7)" }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <button onClick={onBack} style={{
+          width: 32, height: 32, borderRadius: 10, border: "none",
+          background: T.stat, color: T.text, cursor: "pointer", fontSize: 14,
+          display: "flex", alignItems: "center", justifyContent: "center"
+        }}>✕</button>
+        <div style={{ width: 1, height: 24, background: T.cardBorder }} />
+        
+        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+          {editMins !== null ? (
+            <input 
+              type="number"
+              autoFocus
+              value={editMins}
+              onChange={(e) => {
+                setEditMins(e.target.value);
+                handleMinsChange(e.target.value);
+              }}
+              onBlur={() => setEditMins(null)}
+              onKeyDown={(e) => e.key === 'Enter' && setEditMins(null)}
+              style={{ width: 35, background: T.stat, border: "none", color: T.accent, fontSize: 18, fontWeight: 800, textAlign: "center", outline: "none", borderRadius: 6 }}
+            />
+          ) : (
+            <div 
+              onClick={() => { setIsRunning(false); setEditMins(mins.toString()); }}
+              style={{ fontSize: 22, fontWeight: 900, color: isAlarmPlaying ? "#ef4444" : T.text, cursor: "text", fontFamily: "monospace", padding: "0 4px" }}
+            >
+              {mins.toString().padStart(2, "0")}
+            </div>
+          )}
+
+          <span style={{ color: isAlarmPlaying ? "#ef4444" : T.accent, fontWeight: 900, fontSize: 18, opacity: isAlarmPlaying ? 1 : 0.5 }}>:</span>
+
+          {editSecs !== null ? (
+            <input 
+              type="number"
+              autoFocus
+              value={editSecs}
+              onChange={(e) => {
+                setEditSecs(e.target.value);
+                handleSecsChange(e.target.value);
+              }}
+              onBlur={() => setEditSecs(null)}
+              onKeyDown={(e) => e.key === 'Enter' && setEditSecs(null)}
+              style={{ width: 35, background: T.stat, border: "none", color: T.accent, fontSize: 18, fontWeight: 800, textAlign: "center", outline: "none", borderRadius: 6 }}
+            />
+          ) : (
+            <div 
+              onClick={() => { setIsRunning(false); setEditSecs(secs.toString()); }}
+              style={{ fontSize: 22, fontWeight: 900, color: isAlarmPlaying ? "#ef4444" : T.text, cursor: "text", fontFamily: "monospace", padding: "0 4px" }}
+            >
+              {secs.toString().padStart(2, "0")}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <button onClick={reset} style={{
+          width: 36, height: 36, borderRadius: 12, border: "none",
+          background: T.stat, color: T.label, fontSize: 14, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center"
+        }}>↺</button>
+        
+        <button onClick={toggle} style={{
+          padding: "0 18px", height: 40, borderRadius: 14, border: "none",
+          background: T.accent, color: "#fff", fontWeight: 700, fontSize: 13,
+          cursor: "pointer", boxShadow: `0 4px 16px ${T.accent}55`,
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8
+        }}>
+          {isRunning ? <><span style={{ fontSize: 10 }}>⏸</span> PAUSE</> : <><span style={{ fontSize: 10 }}>▶</span> START</>}
+        </button>
+      </div>
+    </motion.div>,
+    document.body
+  );
+});
+
+const DetailPanel = memo(({ recipe, show, onClose, T, onStartTimer }: { recipe: any, show: boolean, onClose: () => void, T: Theme, onStartTimer: (mins: number) => void }) => {
+  const [scale, setScale] = useState(1);
+
+  const handleShare = async () => {
+    if (!recipe) return;
+    const text = `${recipe.emoji} ${recipe.name}\n\nIngredients:\n${recipe.ingredients.map((ing: any) => `- ${ing.name}: ${ing.amount} ${ing.unit}`).join("\n")}\n\nInstructions:\n${recipe.instructions}`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: recipe.name,
+          text: text,
+          url: window.location.href,
+        });
+      } catch (err) {
+        console.log("Error sharing:", err);
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(text);
+        alert("Recipe copied to clipboard!");
+      } catch (err) {
+        console.log("Clipboard error:", err);
+      }
+    }
   };
 
   return (
-    <div className={cn(
-      "atmospheric-bg min-h-screen text-text-bright flex flex-col",
-      settings.highContrast && "contrast-125 saturate-0",
-      !settings.glassmorphism && "no-glass"
-    )}>
-      {/* Header */}
-      <header className="sticky top-0 z-30 pt-4 pb-4 px-6 md:px-12 glass transition-all mx-4 mt-2 rounded-[24px]">
-        <div className="max-w-7xl mx-auto flex flex-col gap-5">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-normal tracking-tight flex items-center gap-1">
-                <TypewriterText text="Zin Kitchen" />
-              </h1>
+    <>
+      <div onClick={onClose} style={{
+        position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.5)",
+        opacity: show ? 1 : 0, pointerEvents: show ? "auto" : "none", transition: "opacity 0.18s ease",
+        backdropFilter: show ? "blur(4px)" : "none"
+      }} />
+      <div style={{
+        position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 51, maxHeight: "88vh", overflowY: "auto",
+        borderRadius: "24px 24px 0 0", padding: "22px 14px 38px",
+        transform: show ? "translateY(0)" : "translateY(100%)",
+        transition: "transform 0.22s cubic-bezier(0.32,0.72,0,1)", willChange: "transform",
+        background: T.headerBg, border: `1.5px solid ${T.cardBorder}`,
+        boxShadow: "0 -20px 60px rgba(0,0,0,0.5)", backdropFilter: "blur(24px)"
+      }}>
+        <div style={{ width: 34, height: 4, borderRadius: 2, margin: "0 auto 18px", background: T.label }} />
+        {recipe && <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+            <div style={{
+              width: 58, height: 58, borderRadius: 16, display: "flex", alignItems: "center",
+              justifyContent: "center", fontSize: 28,
+              background: `linear-gradient(135deg,${recipe.color}35,${recipe.color}10)`,
+              border: `2px solid ${recipe.color}50`, boxShadow: `0 8px 24px ${recipe.color}35`
+            }}>
+              {recipe.emoji}
             </div>
-            
-            <div className="flex gap-2 shrink-0">
-              <button 
-                onClick={() => setShowSettings(!showSettings)}
-                className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl border border-white/20 transition-all duration-150 active:scale-95 text-white shadow-lg"
-                title="Settings"
-              >
-                <Settings2 size={18} className="text-white" />
-                <span className="text-xs font-black uppercase tracking-widest hidden sm:inline">Settings</span>
-              </button>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: "'Playfair Display',serif", fontWeight: 800, fontSize: 20, color: T.text }}>
+                {recipe.name}
+              </div>
+              <div style={{
+                fontSize: 11, color: T.subtext, fontWeight: 600, letterSpacing: "0.05em",
+                textTransform: "uppercase", marginTop: 2
+              }}> {recipe.cuisine}</div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Tooltip text="Share recipe" T={T}>
+                <button 
+                  onClick={handleShare}
+                  style={{ 
+                    width: 38, height: 38, borderRadius: 10, border: `1px solid ${T.cardBorder}`,
+                    background: T.stat, color: T.text, cursor: "pointer", display: "flex",
+                    alignItems: "center", justifyContent: "center", fontSize: 16
+                  }}>📤</button>
+              </Tooltip>
             </div>
           </div>
 
-        </div>
-      </header>
+          {/* Scaler */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+              color: T.label, marginBottom: 8
+            }}>⚖️ Serving Scaler</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {SCALERS.map(s => (
+                <button key={s.val} onClick={() => setScale(s.val)} style={{
+                  padding: "7px 13px", borderRadius: 10, cursor: "pointer",
+                  fontSize: 13, fontWeight: 700, transition: "all 0.12s ease",
+                  color: scale === s.val ? "#fff" : T.subtext,
+                  background: scale === s.val ? `linear-gradient(135deg,${T.accent},${T.accent}bb)` : T.stat,
+                  border: scale === s.val ? `1px solid ${T.accent}80` : `1px solid ${T.statBorder}`,
+                  boxShadow: scale === s.val ? `0 4px 14px ${T.accent}40,inset 0 1px 0 rgba(255,255,255,0.2)` : "none",
+                }}>{s.label}</button>
+              ))}
+            </div>
+          </div>
 
-      {/* Main Content */}
-      <main className="flex-1 px-6 md:px-12 py-8 max-w-7xl mx-auto w-full">
-        <div className="flex justify-between items-end mb-8 relative">
-          <div className="absolute -bottom-4 left-0 right-0 h-px bg-gradient-to-r from-accent/40 via-white/5 to-transparent shadow-[0_1px_0_rgba(255,255,255,0.02)]" />
-        </div>
-
-        {recipes === undefined ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-12">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <RecipeCardSkeleton key={`skeleton-${i}`} />
+          {/* Ingredients */}
+          <div style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+            color: T.label, marginBottom: 9
+          }}>🧂 Ingredients</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 18 }}>
+            {recipe.ingredients.map((ing: any, i: number) => (
+              <div key={i} style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "10px 12px", borderRadius: 11,
+                background: T.stat, border: `1.5px solid ${T.statBorder}`,
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)"
+              }}>
+                <span style={{ fontSize: 13, color: T.text, fontWeight: 500 }}>{ing.name}</span>
+                <span style={{
+                  fontSize: 13, fontWeight: 700, color: T.accent,
+                  background: `${T.accent}18`, padding: "2px 10px", borderRadius: 8,
+                  border: `1.5px solid ${T.accent}30`
+                }}>
+                  {fmt(ing.amount, scale)}{ing.unit === "pcs" ? "" : " "}{ing.unit}
+                </span>
+              </div>
             ))}
           </div>
-        ) : recipes && recipes.length > 0 ? (
-          <motion.div 
-            initial="hidden"
-            animate="visible"
-            variants={{
-              visible: { 
-                transition: { 
-                  staggerChildren: 0.03,
-                  delayChildren: 0.02
-                } 
-              }
-            }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-12"
-          >
-            <AnimatePresence mode="popLayout">
-              {recipes.map(recipe => (
-                <motion.div
-                  key={recipe.id}
-                  variants={{
-                    hidden: { opacity: 0, y: 15, scale: 0.95 },
-                    visible: { 
-                      opacity: 1, 
-                      y: 0, 
-                      scale: 1,
-                      transition: {
-                        type: "spring",
-                        damping: 20,
-                        stiffness: 500,
-                        mass: 0.6
-                      }
-                    }
-                  }}
-                  layout
-                >
-                  <RecipeCard 
-                    recipe={recipe} 
-                    onClick={() => setViewingRecipe(recipe)}
-                    onEdit={(e) => {
-                      e.stopPropagation();
-                      setEditingRecipe(recipe);
-                      setShowForm(true);
-                    }}
-                  />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </motion.div>
-        ) : (
-          <div className="min-h-[50vh] flex flex-col items-center justify-center text-center p-10 relative overflow-hidden group">
-            {/* Animated Background Glow for Empty State */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-accent/20 blur-[100px] rounded-full animate-pulse" />
-            
-            <motion.div 
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              className="relative z-10 space-y-4 flex flex-col items-center"
-            >
-              
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <h2 className="text-3xl font-black italic tracking-tighter text-white">Your Kitchen is Dormant</h2>
-                  <p className="max-w-xs mx-auto text-[10px] font-black uppercase tracking-[3px] text-accent/60">
-                    The curator's touch is missing. Begin the legend by adding your first masterpiece.
-                  </p>
-                </div>
-                
-                <button 
-                  onClick={() => { setEditingRecipe(undefined); setShowForm(true); }}
-                  className="px-8 py-3 bg-white text-black rounded-full font-black text-xs uppercase tracking-widest hover:bg-accent hover:text-white transition-all duration-150 shadow-2xl active:scale-95"
-                >
-                  Create Now
-                </button>
+
+          {/* Instructions */}
+          {recipe.instructions && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{
+                fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+                color: T.label, marginBottom: 12
+              }}>📖 Instructions</div>
+              <div style={{ 
+                fontSize: 14, 
+                color: T.text, 
+                lineHeight: "1.6",
+                padding: "16px",
+                borderRadius: "16px",
+                background: T.stat,
+                border: `1px solid ${T.statBorder}`,
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)"
+              }}>
+                <ReactMarkdown components={{
+                  h1: ({node, ...props}) => <h1 style={{ fontSize: "1.5rem", fontWeight: "800", marginBottom: "1rem" }} {...props} />,
+                  h2: ({node, ...props}) => <h2 style={{ fontSize: "1.25rem", fontWeight: "700", marginBottom: "0.75rem" }} {...props} />,
+                  h3: ({node, ...props}) => <h3 style={{ fontSize: "1.1rem", fontWeight: "700", marginBottom: "0.5rem" }} {...props} />,
+                  p: ({node, ...props}) => <p style={{ marginBottom: "0.75rem" }} {...props} />,
+                  ul: ({node, ...props}) => <ul style={{ paddingLeft: "1.5rem", marginBottom: "0.75rem", listStyleType: "disc" }} {...props} />,
+                  ol: ({node, ...props}) => <ol style={{ paddingLeft: "1.5rem", marginBottom: "0.75rem", listStyleType: "decimal" }} {...props} />,
+                  li: ({node, ...props}) => <li style={{ marginBottom: "0.25rem" }} {...props} />,
+                  blockquote: ({node, ...props}) => <blockquote style={{ borderLeft: `4px solid ${T.accent}`, paddingLeft: "1rem", fontStyle: "italic", margin: "1rem 0" }} {...props} />,
+                }}>
+                  {recipe.instructions}
+                </ReactMarkdown>
               </div>
-            </motion.div>
-          </div>
-        )}
-      </main>
-
-      {/* Floating Buttons */}
-      <div className="fixed bottom-8 right-8 flex flex-col gap-3 z-40">
-        <AnimatePresence>
-          {showBackToTop && (
-            <motion.button
-              initial={{ opacity: 0, y: 20, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20, scale: 0.8 }}
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="w-12 h-12 rounded-full glass-dark flex items-center justify-center text-white border border-white/20 shadow-2xl hover:bg-white/10 transition-all duration-150 active:scale-95 group/btn"
-            >
-              <ChevronUp size={24} className="group-hover/btn:-translate-y-1 transition-transform duration-150" />
-            </motion.button>
+            </div>
           )}
-        </AnimatePresence>
 
-        <button 
-          onClick={() => { setEditingRecipe(undefined); setShowForm(true); }}
-          className="fab static group/fab active:scale-[0.85] transition-all duration-150"
+          <button onClick={() => onStartTimer(recipe.time || 10)} style={{
+            width: "100%", padding: "15px", borderRadius: 14, border: "none",
+            cursor: "pointer", fontFamily: "'Playfair Display',serif", fontSize: 16, fontWeight: 700,
+            color: "#fff", background: `linear-gradient(135deg,${T.accent},${T.accent}bb)`,
+            boxShadow: `0 8px 24px ${T.accent}45,inset 0 1px 0 rgba(255,255,255,0.25)`
+          }}>
+            Start Cooking →
+          </button>
+        </div>}
+      </div>
+    </>
+  );
+});
+
+const HandwritingTitle = memo(({ text, color }: { text: string, color: string }) => {
+  const chars = text.split("");
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <style>
+        {`
+          @keyframes title-fade-cycle {
+            0%, 75% { opacity: 1; }
+            85%, 100% { opacity: 0; }
+          }
+          @keyframes title-fill-fade {
+            0%, 50% { opacity: 0; }
+            65%, 100% { opacity: 1; }
+          }
+        `}
+        {chars.map((_, i) => `
+          @keyframes char-trace-${i} {
+            0%, ${i * 4}% { stroke-dashoffset: 200; }
+            ${(i * 4) + 15}%, 100% { stroke-dashoffset: 0; }
+          }
+          .char-anim-${i} {
+            stroke-dasharray: 200;
+            stroke-dashoffset: 200;
+            animation: char-trace-${i} 8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+          }
+        `).join("")}
+      </style>
+
+      <div style={{ animation: "title-fade-cycle 8s infinite", height: 32, display: "flex", alignItems: "center" }}>
+        <svg 
+          viewBox="0 0 160 36" 
+          style={{ width: "160px", height: "36px", overflow: "visible" }}
         >
-          <Plus size={28} className="transition-transform duration-300 group-hover/fab:rotate-90 group-active/fab:rotate-180" />
-        </button>
+          {/* Stroke Layer */}
+          <text 
+            x="0" y="28" 
+            fontFamily="'Dancing Script', cursive" 
+            fontSize="28px" 
+            fontWeight="700"
+            fill="transparent"
+            stroke={color}
+            strokeWidth="1"
+            style={{ filter: `drop-shadow(0 0 4px ${color})` }}
+          >
+            {chars.map((char, i) => (
+              <tspan key={i} className={`char-anim-${i}`}>{char}</tspan>
+            ))}
+          </text>
+          
+          {/* Fill Layer */}
+          <text 
+            x="0" y="28" 
+            fontFamily="'Dancing Script', cursive" 
+            fontSize="28px" 
+            fontWeight="700"
+            fill={color}
+            style={{ 
+              animation: "title-fill-fade 8s infinite",
+              filter: `drop-shadow(0 0 6px ${color}) drop-shadow(0 0 12px ${color})`
+            }}
+          >
+            {text}
+          </text>
+        </svg>
+      </div>
+    </div>
+  );
+});
+
+export default function KitchenApp() {
+  const [themeId, setThemeId] = useState("dark");
+  const [cat, setCat] = useState("All");
+  const [recipes, setRecipes] = useState(BASE_RECIPES);
+  const [recentlyOpened, setRecentlyOpened] = useState<any[]>([]);
+  const [selected, setSelected] = useState<any>(null);
+  const [actionRecipe, setActionRecipe] = useState<any>(null);
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [activeTimerMinutes, setActiveTimerMinutes] = useState<number | null>(null);
+  
+  // New Recipe State
+  const [newName, setNewName] = useState("");
+  const [newEmoji, setNewEmoji] = useState("🍽️");
+  const [newColor, setNewColor] = useState("#6366f1");
+  const [newIngredients, setNewIngredients] = useState([{ name: "", amount: "", unit: "g" }]);
+  const [newInstructions, setNewInstructions] = useState("");
+  const [newImage, setNewImage] = useState<string | null>(null);
+
+  const UNITS = ["g", "kg", "ml", "l", "tbsp", "tsp", "cups", "pcs", "pinch", "piece", "slice", "bunch"];
+  const PRESET_COLORS = ["#6366f1", "#ec4899", "#14b8a6", "#f97316", "#8b5cf6", "#ef4444", "#3b82f6", "#22c55e"];
+
+  const lastBackPress = useRef<number>(0);
+
+  const T = useMemo(() => THEMES.find(t => t.id === themeId) || THEMES[0], [themeId]);
+
+  // ANDROID HARDWARE BACK BUTTON LOGIC
+  useEffect(() => {
+    // Push an initial state so we have something to "go back" from
+    window.history.pushState({ page: "home" }, "");
+
+    const handlePopState = (event: PopStateEvent) => {
+      const now = Date.now();
+      
+      if (showCreate || showDetail || showActionMenu) {
+        // If an overlay is open, just close it and stay on Home
+        setShowCreate(false);
+        setShowDetail(false);
+        setShowActionMenu(false);
+        window.history.pushState({ page: "home" }, "");
+        return;
+      }
+
+      if (now - lastBackPress.current < 2000) {
+        // Double tap confirmed - Exit app (simulated for web/PWA)
+        if (confirm("Do you want to exit the app?")) {
+          window.close();
+        }
+      } else {
+        // Single tap - Always navigate to Home
+        lastBackPress.current = now;
+        window.history.pushState({ page: "home" }, "");
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [showCreate, showDetail, showActionMenu]);
+
+  const filtered = cat === "All" ? recipes : recipes.filter(r => r.cuisine === cat);
+
+  const openRecipe = useCallback((r: any) => { 
+    setSelected(r); 
+    setShowDetail(true);
+    setRecentlyOpened(prev => {
+      const exists = prev.find(p => p.id === r.id);
+      if (exists) {
+        return [r, ...prev.filter(p => p.id !== r.id)];
+      }
+      return [r, ...prev].slice(0, 10);
+    });
+  }, []);
+  const closeDetail = useCallback(() => setShowDetail(false), []);
+
+  const openActionMenu = useCallback((r: any) => {
+    setActionRecipe(r);
+    setShowActionMenu(true);
+  }, []);
+
+  const deleteRecipe = useCallback(() => {
+    if (!actionRecipe) return;
+    setRecipes(p => p.filter(r => r.id !== actionRecipe.id));
+    setRecentlyOpened(p => p.filter(r => r.id !== actionRecipe.id));
+    setShowActionMenu(false);
+  }, [actionRecipe]);
+
+  const startEdit = useCallback(() => {
+    if (!actionRecipe) return;
+    setNewName(actionRecipe.name);
+    setNewEmoji(actionRecipe.emoji);
+    setNewColor(actionRecipe.color || "#6366f1");
+    setNewIngredients(actionRecipe.ingredients.map((i: any) => ({ 
+      name: i.name, 
+      amount: i.amount.toString(), 
+      unit: i.unit 
+    })));
+    setNewInstructions(actionRecipe.instructions || "");
+    setNewImage(actionRecipe.imageUrl || null);
+    setIsEditing(true);
+    setShowCreate(true);
+    setShowActionMenu(false);
+  }, [actionRecipe]);
+
+  const saveRecipe = useCallback(() => {
+    if (!newName.trim()) return;
+    
+    const ingredients = newIngredients
+      .filter(i => i.name.trim())
+      .map(i => ({ name: i.name, amount: parseFloat(i.amount) || 0, unit: i.unit }));
+
+    if (isEditing && actionRecipe) {
+      setRecipes(p => p.map(r => r.id === actionRecipe.id ? {
+        ...r,
+        name: newName.trim(),
+        emoji: newEmoji,
+        color: newColor,
+        ingredients,
+        imageUrl: newImage,
+        instructions: newInstructions
+      } : r));
+      setRecentlyOpened(p => p.map(r => r.id === actionRecipe.id ? {
+        ...r,
+        name: newName.trim(),
+        emoji: newEmoji,
+        color: newColor,
+        ingredients,
+        imageUrl: newImage,
+        instructions: newInstructions
+      } : r));
+    } else {
+      setRecipes(p => [{
+        id: Date.now(), name: newName.trim(), cuisine: "Custom",
+        emoji: newEmoji,
+        color: newColor,
+        time: 30, timeUnit: "min",
+        ingredients,
+        imageUrl: newImage,
+        instructions: newInstructions
+      }, ...p]);
+    }
+
+    setNewName(""); 
+    setNewEmoji("🍽️");
+    setNewColor("#6366f1");
+    setNewIngredients([{ name: "", amount: "", unit: "g" }]); 
+    setNewInstructions(""); 
+    setNewImage(null); 
+    setShowCreate(false);
+    setIsEditing(false);
+    setActionRecipe(null);
+  }, [newName, newEmoji, newColor, newIngredients, newImage, newInstructions, isEditing, actionRecipe]);
+
+  const startCreate = useCallback(() => {
+    setNewName("");
+    setNewEmoji("🍽️");
+    setNewColor("#6366f1");
+    setNewIngredients([{ name: "", amount: "", unit: "g" }]);
+    setNewInstructions("");
+    setNewImage(null);
+    setIsEditing(false);
+    setShowCreate(true);
+  }, []);
+
+  // Auto-update emoji when name changes (if creating or editing)
+  useEffect(() => {
+    if (newName.trim()) {
+      setNewEmoji(getIconForRecipe(newName.trim()));
+    }
+  }, [newName]);
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: T.bg, fontFamily: "'DM Sans','Segoe UI',sans-serif",
+      overflowX: "hidden", WebkitOverflowScrolling: "touch", color: T.text
+    }}>
+      <style>{`
+        @keyframes border-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+
+      {/* HEADER */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 40, padding: "14px 14px 12px",
+        background: T.headerBg, borderBottom: `1px solid ${T.headerBorder}`,
+        backdropFilter: "blur(24px)", boxShadow: "0 4px 20px rgba(0,0,0,0.25)"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <HandwritingTitle text="Zin's Kitchen" color={T.accent} />
+            <div style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+              color: T.subtext, marginTop: 0
+            }}>{recipes.length} Masterpieces</div>
+          </div>
+          <button onClick={() => setThemeId(t => t === 'dark' ? 'light' : 'dark')} style={{
+            background: "transparent", border: "none", cursor: "pointer", display: "flex",
+            alignItems: "center", justifyContent: "center", fontSize: 24, padding: 8,
+            outline: "none", WebkitTapHighlightColor: "transparent"
+          }}>
+            {T.icon}
+          </button>
+        </div>
       </div>
 
-      {/* Settings Panel */}
-      <AnimatePresence>
-        {showSettings && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            onClick={() => setShowSettings(false)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          >
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0, y: 15 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 15 }}
-              transition={{ 
-                type: "spring", 
-                damping: 25, 
-                stiffness: 500,
-                mass: 0.5
-              }}
-              onClick={(e) => e.stopPropagation()}
-              className="glass-dark p-6 rounded-[2rem] w-full max-w-sm space-y-6 shadow-2xl border border-white/10 max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex justify-between items-center border-b border-white/5 pb-4">
-                <div className="space-y-0.5">
-                  <h2 className="text-xl font-black tracking-tight text-white">System Config</h2>
-                  <p className="text-[8px] font-black uppercase tracking-[2px] text-accent">Preferences</p>
+      {/* RECENTLY OPENED CARD COMPONENT TO SHARE LONG PRESS */}
+      {/* (Internal helper for horizontal cards) */}
+      {(() => {
+        return (
+          <div style={{ padding: "20px 14px", paddingBottom: 100 }}>
+            {/* RECENTLY OPENED SECTION */}
+            {recentlyOpened.length > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", color: T.text }}>Recently Opened</h3>
                 </div>
-                <button 
-                  onClick={() => setShowSettings(false)} 
-                  className="p-2 hover:bg-white/10 rounded-full transition-all text-white/50 border border-transparent hover:border-white/10 active:scale-90"
-                >
-                  <X size={18} />
+                <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 10, scrollbarWidth: "none" }}>
+                  <AnimatePresence mode="popLayout">
+                    {recentlyOpened.map(r => (
+                      <div key={r.id} style={{ width: "calc(50vw - 20px)", flexShrink: 0 }}>
+                        <RecipeCard recipe={r} T={T} onOpen={openRecipe} onLongPress={openActionMenu} />
+                      </div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              </div>
+            )}
+
+            {/* RECENT ADDITIONS GRID */}
+            <h3 style={{ fontSize: 18, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", color: T.text, marginBottom: 14 }}>New Additions</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <AnimatePresence mode="popLayout">
+                {filtered.map(r => (
+                  <RecipeCard key={r.id} recipe={r} T={T} onOpen={openRecipe} onLongPress={openActionMenu} />
+                ))}
+              </AnimatePresence>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* FAB */}
+      <button onClick={startCreate} style={{ position: "fixed", bottom: 24, right: 20, width: 56, height: 56, borderRadius: "50%", border: "none", cursor: "pointer", fontSize: 24, display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg,${T.accent},${T.accent}cc)`, boxShadow: `0 8px 24px ${T.accent}45,inset 0 1px 0 rgba(255,255,255,0.3)`, zIndex: 35 }}>
+        ➕
+      </button>
+
+      {/* ACTION MENU (LONG PRESS) */}
+      <AnimatePresence>
+        {showActionMenu && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowActionMenu(false)}
+              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 70, backdropFilter: "blur(4px)" }}
+            />
+            <motion.div 
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              style={{
+                position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 71,
+                background: T.headerBg, borderTop: `1.5px solid ${T.cardBorder}`,
+                borderRadius: "24px 24px 0 0", padding: "16px 20px 40px",
+                boxShadow: "0 -10px 40px rgba(0,0,0,0.4)"
+              }}
+            >
+              <div style={{ width: 36, height: 4, background: T.pillBorder, borderRadius: 2, margin: "0 auto 20px" }} />
+              <div style={{ marginBottom: 20, textAlign: "center" }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: T.label, textTransform: "uppercase", letterSpacing: "0.05em" }}>Manage recipe</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: T.text, marginTop: 4 }}>{actionRecipe?.name}</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <button onClick={startEdit} style={{
+                  width: "100%", padding: "16px", borderRadius: 16, border: "none", background: T.pill,
+                  color: T.text, fontWeight: 700, fontSize: 16, display: "flex", alignItems: "center", gap: 12, cursor: "pointer"
+                }}>
+                  <span>✏️</span> Edit Recipe
+                </button>
+                <button onClick={deleteRecipe} style={{
+                  width: "100%", padding: "16px", borderRadius: 16, border: "none", background: "rgba(239, 68, 68, 0.15)",
+                  color: "#ef4444", fontWeight: 700, fontSize: 16, display: "flex", alignItems: "center", gap: 12, cursor: "pointer"
+                }}>
+                  <span>🗑️</span> Delete Recipe
                 </button>
               </div>
-
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 px-1">
-                    <Palette size={14} className="text-white/40" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Atmosphere</span>
-                  </div>
-                  <div className="flex gap-2">
-                    {THEMES.map(theme => (
-                      <button
-                        key={theme.id}
-                        onClick={() => setSettings(s => ({ ...s, themeId: theme.id }))}
-                        className={cn(
-                          "flex-1 py-3 rounded-xl border text-[9px] font-black transition-all shadow-sm active:scale-95 text-center flex items-center justify-center gap-2",
-                          settings.themeId === theme.id 
-                            ? "bg-accent/20 border-accent/40 text-accent" 
-                            : "border-white/5 bg-white/5 text-white/40 hover:bg-white/10 hover:text-white"
-                        )}
-                        title={theme.name}
-                      >
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: theme.accent }} />
-                        {theme.name.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <button 
-                    onClick={() => setSettings(s => ({ ...s, highContrast: !s.highContrast }))}
-                    className={cn(
-                      "flex items-center justify-between p-4 rounded-2xl border transition-all duration-150 shadow-sm active:scale-[0.98]",
-                      settings.highContrast ? "bg-accent/20 border-accent/40 text-accent font-black" : "bg-white/5 border-white/5 text-white/60 hover:bg-white/10"
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Sun size={14} />
-                      <span className="text-[10px] uppercase tracking-wider">Contrast</span>
-                    </div>
-                    <div className={cn("w-2 h-2 rounded-full", settings.highContrast ? "bg-accent animate-pulse" : "bg-white/20")} />
-                  </button>
-
-                  <button 
-                    onClick={() => setSettings(s => ({ ...s, glassmorphism: !s.glassmorphism }))}
-                    className={cn(
-                      "flex items-center justify-between p-4 rounded-2xl border transition-all duration-150 shadow-sm active:scale-[0.98]",
-                      settings.glassmorphism ? "bg-accent/20 border-accent/40 text-accent font-black" : "bg-white/5 border-white/5 text-white/60 hover:bg-white/10"
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Palette size={14} />
-                      <span className="text-[10px] uppercase tracking-wider">FX</span>
-                    </div>
-                    <div className={cn("w-2 h-2 rounded-full", settings.glassmorphism ? "bg-accent animate-pulse" : "bg-white/20")} />
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 px-1">
-                    <Type size={14} className="text-white/40" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Typography</span>
-                  </div>
-                  <div className="flex gap-2">
-                    {FONT_SIZES.map(f => (
-                      <button
-                        key={f.id}
-                        onClick={() => setSettings(s => ({ ...s, fontSize: f.id }))}
-                        className={cn(
-                          "flex-1 py-3 rounded-xl border text-[9px] font-black transition-all shadow-sm active:scale-95",
-                          settings.fontSize === f.id ? "bg-accent text-white border-white" : "border-white/5 bg-white/5 text-white/40 hover:bg-white/10 hover:text-white"
-                        )}
-                      >
-                        {f.name.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-white/5 space-y-3">
-                  <div className="flex items-center gap-2 px-1">
-                    <Settings2 size={12} className="text-white/40" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Maintenance</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={importRecipes}
-                      className="flex-1 flex flex-col items-center gap-1.5 py-3 bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 rounded-2xl transition-all duration-150 shadow-md active:scale-90"
-                    >
-                      <Upload size={14} className="text-white/40" />
-                      <span className="text-[9px] font-black uppercase tracking-widest text-white/60">Restore</span>
-                    </button>
-                    <button 
-                      onClick={exportAll}
-                      className="flex-1 flex flex-col items-center gap-1.5 py-3 bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 rounded-2xl transition-all duration-150 shadow-md active:scale-90"
-                    >
-                      <Download size={14} className="text-white/40" />
-                      <span className="text-[9px] font-black uppercase tracking-widest text-white/60">Backup</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {/* Modals */}
-      <AnimatePresence>
-        {showForm && (
-          <RecipeForm 
-            recipe={editingRecipe} 
-            onClose={() => { setShowForm(false); setEditingRecipe(undefined); }}
-            onSave={() => {}} 
-          />
-        )}
-        {viewingRecipe && (
-          <RecipeDetail 
-            recipe={viewingRecipe}
-            onClose={() => setViewingRecipe(undefined)}
-          />
+          </>
         )}
       </AnimatePresence>
 
-      <footer className="py-12 text-center opacity-10 text-xs font-black tracking-[4px] uppercase mt-auto">
-        ChefLocal • Offline Recipe Companion
-      </footer>
+      {/* DETAILED MODALS */}
+      <DetailPanel recipe={selected} show={showDetail} onClose={closeDetail} T={T} onStartTimer={(mins) => setActiveTimerMinutes(mins)} />
+
+      {/* ENHANCED CREATE RECIPE FULLSCREEN MODAL */}
+      <div style={{
+        position: "fixed", inset: 0, zIndex: 60, display: "flex", flexDirection: "column",
+        background: T.bg, transition: "transform 0.3s ease",
+        transform: showCreate ? "translateY(0)" : "translateY(100%)",
+        paddingTop: "env(safe-area-inset-top)"
+      }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+          {/* Main Attributes Row: Photo, Icon, Name */}
+          <div style={{ display: "flex", gap: 12, marginBottom: 24, alignItems: "flex-end" }}>
+            {/* Minimal Photo Box */}
+            <div style={{ width: 62 }}>
+              <label style={{ fontSize: 9, fontWeight: 800, textTransform: "uppercase", color: T.label, display: "block", marginBottom: 8, letterSpacing: "0.05em" }}>Photo</label>
+              <Tooltip text="ADD PHOTO" T={T}>
+                <label 
+                  style={{ 
+                    width: 62, height: 62, borderRadius: 16, border: `1.5px dashed ${T.cardBorder}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    background: T.stat, cursor: "pointer", transition: "all 0.2s", overflow: "hidden", position: "relative"
+                  }}
+                >
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    style={{ display: "none" }} 
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => setNewImage(reader.result as string);
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  {newImage ? (
+                    <img src={newImage} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    <div style={{ fontSize: 22 }}>📷</div>
+                  )}
+                </label>
+              </Tooltip>
+            </div>
+
+            {/* Icon Box */}
+            <div style={{ width: 62 }}>
+              <label style={{ fontSize: 9, fontWeight: 800, textTransform: "uppercase", color: T.label, display: "block", marginBottom: 8, letterSpacing: "0.05em" }}>Icon</label>
+              <input 
+                value={newEmoji} 
+                onChange={e => setNewEmoji(e.target.value)} 
+                style={{ 
+                  width: 62, height: 62, borderRadius: 16, border: `1px solid ${T.cardBorder}`, 
+                  background: T.stat, color: T.text, outline: "none", textAlign: "center", fontSize: 24, padding: 0
+                }}
+              />
+            </div>
+
+            {/* Recipe Name Input */}
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 9, fontWeight: 800, textTransform: "uppercase", color: T.label, display: "block", marginBottom: 8, letterSpacing: "0.05em" }}>Recipe Name</label>
+              <input 
+                value={newName} 
+                onChange={e => setNewName(e.target.value)} 
+                placeholder="Name your masterpiece..."
+                style={{ 
+                  width: "100%", height: 62, padding: "0 18px", borderRadius: 16, 
+                  border: `1px solid ${T.cardBorder}`, background: T.stat, color: T.text, outline: "none" 
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Structured Ingredients Input */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <label style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", color: T.label }}>Ingredients</label>
+              <Tooltip text="Add new ingredient row" T={T}>
+                <button 
+                  onClick={() => setNewIngredients([...newIngredients, { name: "", amount: "", unit: "g" }])}
+                  style={{ fontSize: 11, fontWeight: 800, color: T.accent, background: "none", border: "none", cursor: "pointer" }}
+                >
+                  + ADD INGREDIENT
+                </button>
+              </Tooltip>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {newIngredients.map((ing, idx) => (
+                <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center", width: "100%" }}>
+                  <input 
+                    value={ing.name} 
+                    onChange={(e) => {
+                      const copy = [...newIngredients];
+                      copy[idx].name = e.target.value;
+                      setNewIngredients(copy);
+                    }}
+                    placeholder="Name"
+                    style={{ flex: 2, minWidth: 0, padding: "10px 12px", borderRadius: 12, border: `1px solid ${T.cardBorder}`, background: T.stat, color: T.text, outline: "none", fontSize: 13 }}
+                  />
+                  <input 
+                    value={ing.amount} 
+                    onChange={(e) => {
+                      const copy = [...newIngredients];
+                      copy[idx].amount = e.target.value;
+                      setNewIngredients(copy);
+                    }}
+                    placeholder="Qty"
+                    style={{ flex: 1, minWidth: 0, padding: "10px 12px", borderRadius: 12, border: `1px solid ${T.cardBorder}`, background: T.stat, color: T.text, outline: "none", fontSize: 13 }}
+                  />
+                  <select 
+                    value={ing.unit} 
+                    onChange={(e) => {
+                      const copy = [...newIngredients];
+                      copy[idx].unit = e.target.value;
+                      setNewIngredients(copy);
+                    }}
+                    style={{ flex: 1, minWidth: 0, padding: "10px 8px", borderRadius: 12, border: `1px solid ${T.cardBorder}`, background: T.stat, color: T.text, outline: "none", fontSize: 12 }}
+                  >
+                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                  {newIngredients.length > 1 && (
+                    <button 
+                      onClick={() => setNewIngredients(newIngredients.filter((_, i) => i !== idx))}
+                      style={{ padding: "8px", background: "none", border: "none", color: "#ef4444", fontSize: 16, cursor: "pointer", flexShrink: 0 }}
+                    >✕</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Instructions Input */}
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <label style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", color: T.label }}>Cooking Instructions</label>
+                <button style={{ 
+                  width: 18, height: 18, borderRadius: "50%", background: T.pill, border: "none",
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, cursor: "pointer", color: T.accent
+                }}>ℹ️</button>
+              </div>
+            </div>
+            
+            {/* Guide Bubble Removed */}
+
+            <textarea 
+              rows={6}
+              value={newInstructions} 
+              onChange={e => setNewInstructions(e.target.value)} 
+              placeholder="Step 1: Boil the water...&#10;Step 2: Add ingredients...&#10;Tip: Use **bold** for emphasis!"
+              style={{ width: "100%", padding: 16, borderRadius: 16, border: `1px solid ${T.cardBorder}`, background: T.stat, color: T.text, outline: "none", resize: "none", fontSize: 14, fontFamily: "inherit" }}
+            />
+          </div>
+
+          <button onClick={saveRecipe} style={{
+            width: "100%", padding: 18, borderRadius: 18, border: "none", cursor: "pointer",
+            background: `linear-gradient(135deg, ${T.accent}, ${T.accent}cc)`,
+            color: "#fff", fontWeight: 800, fontSize: 16,
+            boxShadow: `0 8px 32px ${T.accent}40`, marginBottom: 40
+          }}>
+            {isEditing ? "UPDATE RECIPE" : "SAVE RECIPE"}
+          </button>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {activeTimerMinutes !== null && typeof document !== "undefined" && (
+          <CookingTimer 
+            initialMinutes={activeTimerMinutes} 
+            T={T} 
+            onBack={() => setActiveTimerMinutes(null)} 
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

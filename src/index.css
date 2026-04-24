@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400..700&family=Caveat:wght@400..700&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=DM+Sans:ital,wght@0,400;0,700;1,400&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -143,6 +144,23 @@
     60% { filter: drop-shadow(0 0 8px #00ff00); }
     80% { filter: drop-shadow(0 0 5px #0000ff); }
     100% { filter: drop-shadow(0 0 8px #ff0000); }
+  }
+
+  @keyframes handwriting-reveal {
+    0%, 10% { clip-path: polygon(0 0, 0 0, 0 100%, 0 100%); opacity: 1; }
+    40%, 65% { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); opacity: 1; }
+    80%, 85% { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); opacity: 0; }
+    90%, 100% { clip-path: polygon(0 0, 0 0, 0 100%, 0 100%); opacity: 0; }
+  }
+  
+  .animate-handwriting {
+    display: inline-block;
+    white-space: nowrap;
+    animation: handwriting-reveal 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  .glow-neon {
+    text-shadow: 0 0 10px var(--accent-color), 0 0 20px var(--accent-color), 0 0 30px var(--accent-color);
   }
   
   .animate-draw-text {
